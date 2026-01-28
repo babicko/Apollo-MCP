@@ -217,7 +217,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     )]
             
             elif name == "apollo_search_people":
-                url = f"{APOLLO_BASE_URL}/mixed_people/search"
+                url = f"{APOLLO_BASE_URL}/mixed_people/api_search"
                 data = {
                     "page": arguments.get("page", 1),
                     "per_page": 10
@@ -237,18 +237,28 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 
                 if response.status_code == 200:
                     people = result.get("people", [])
-                    
+
                     formatted_people = []
                     for person in people[:10]:
+                        # Handle both old and new API response formats
+                        name = person.get("name")
+                        if not name:
+                            first_name = person.get("first_name", "")
+                            last_name = person.get("last_name") or person.get("last_name_obfuscated", "")
+                            name = f"{first_name} {last_name}".strip()
+
+                        org = person.get("organization", {})
+                        company = person.get("organization_name") or org.get("name", "")
+
                         formatted_people.append({
                             "id": person.get("id"),
-                            "name": person.get("name"),
+                            "name": name,
                             "title": person.get("title"),
-                            "company": person.get("organization_name"),
-                            "location": person.get("city"),
-                            "linkedin": person.get("linkedin_url")
+                            "company": company,
+                            "has_email": person.get("has_email", False),
+                            "has_phone": person.get("has_direct_phone") == "Yes"
                         })
-                    
+
                     return [TextContent(
                         type="text",
                         text=json.dumps({
@@ -260,7 +270,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 else:
                     return [TextContent(
                         type="text",
-                        text=f"Search error: {result.get('message', 'Unknown error')}"
+                        text=f"Search error (HTTP {response.status_code}): {json.dumps(result, indent=2)}"
                     )]
             
             elif name == "apollo_get_contact_info":
